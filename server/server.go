@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -46,42 +47,55 @@ func (s *TcpServer) Run() error {
 			return err
 		}
 
-		go func(connection net.Conn) {
-			defer connection.Close()
-
-			buffer := make([]byte, 1024)
-			var received []byte
-
-			for {
-				n, err := connection.Read(buffer)
-				if n > 0 {
-					received = append(received, buffer[:n]...)
-				}
-				if err == io.EOF {
-					sent := 0
-
-					for sent < len(received) {
-						n, err := connection.Write(received[sent:])
-						if err != nil {
-							return
-						}
-						if n == 0 {
-							return
-						}
-						sent += n
-					}
-					break
-
-				}
-				if err != nil {
-					s.config.Logger.Error("An error occured while reading the connection data", "error", err)
-					return
-				}
+		go func() {
+			err := s.handleConnection(conn)
+			if err != nil {
+				s.config.Logger.Error("connection failed", "error", err)
 			}
+		}()
 
-		}(conn)
+	}
+}
 
+func (s *TcpServer) handleConnection(connection net.Conn) error {
+	defer connection.Close()
+
+	buffer := make([]byte, 1024)
+	var received []byte
+
+	for {
+		n, err := connection.Read(buffer)
+		if n > 0 {
+			received = append(received, buffer[:n]...)
+		}
+		if err == io.EOF {
+			sent := 0
+
+			for sent < len(received) {
+				n, err := connection.Write(received[sent:])
+				if err != nil {
+					s.config.Logger.Error("failed to write connection data", "error", err)
+					return err
+				}
+				if n == 0 {
+					s.config.Logger.Error("nothing to write", "n", n)
+					return errors.New("write have nothing to write n == 0")
+				}
+				sent += n
+			}
+			break
+
+		}
+		if err != nil {
+			s.config.Logger.Error("failed to read connection data", "error", err)
+			return err
+		}
 	}
 
 	return nil
+}
+
+func (s *TcpServer) Close() {
+	// TODO
+
 }
