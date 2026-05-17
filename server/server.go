@@ -1,6 +1,7 @@
 package server
 
 import (
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -46,21 +47,31 @@ func (s *TcpServer) Run() error {
 		}
 
 		go func(connection net.Conn) {
-			defer conn.Close()
+			defer connection.Close()
 
-			data := make([]byte, 1024)
+			buffer := make([]byte, 1024)
+			var received []byte
 
-			n, err := connection.Read(data)
-			if err != nil {
-				s.config.Logger.Error("An error occured while reading the connection data", "error", err)
-				return
+			for {
+				n, err := connection.Read(buffer)
+				if n > 0 {
+					received = append(received, buffer[:n]...)
+				}
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					s.config.Logger.Error("An error occured while reading the connection data", "error", err)
+					return
+				}
+				clientData := string(buffer[:n])
+				s.config.Logger.Info("client sent", "data", clientData)
+				_, err = connection.Write([]byte(clientData))
+				if err != nil {
+					return
+				}
 			}
-			clientData := string(data[:n])
-			s.config.Logger.Info("client sent", "data", clientData)
-			_, err = conn.Write([]byte(clientData))
-			if err != nil {
-				return
-			}
+
 		}(conn)
 
 	}
