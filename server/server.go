@@ -58,16 +58,23 @@ func (s *TcpServer) Run() error {
 					received = append(received, buffer[:n]...)
 				}
 				if err == io.EOF {
+					sent := 0
+
+					for sent < len(received) {
+						n, err := connection.Write(received[sent:])
+						if err != nil {
+							return
+						}
+						if n == 0 {
+							return
+						}
+						sent += n
+					}
 					break
+
 				}
 				if err != nil {
 					s.config.Logger.Error("An error occured while reading the connection data", "error", err)
-					return
-				}
-				clientData := string(buffer[:n])
-				s.config.Logger.Info("client sent", "data", clientData)
-				_, err = connection.Write([]byte(clientData))
-				if err != nil {
 					return
 				}
 			}
